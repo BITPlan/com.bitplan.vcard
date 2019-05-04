@@ -1,0 +1,25 @@
+#!/bin/bash
+# Backup contact
+# WF 2014-08-06
+jar=release/VCard.jar
+if [ ! -f $jar ]
+then
+  mvn clean install -D createAssembly=true -D createRelease=true
+fi
+
+p=`pwd`
+for user in $@
+do
+ echo "getting VCard data for $user"
+ cd $p
+ java -jar $jar --user $user
+ #--debug
+ backup=`grep backup $HOME/.vcard/$user.ini | cut -f2 -d=`
+ cd $backup
+ cd ..
+ pwd
+ timestamp=`date "+%Y-%m-%d-%H_%M_%S"`
+ target=Vcard_Backup_${user}_${timestamp}.tar
+ tar cvf $target $backup > /dev/null 2>&1
+ ls -l $target
+done
