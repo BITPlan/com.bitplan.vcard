@@ -1,0 +1,4 @@
+# this is a java project using maven
+language: java
+# switch off gpg handling
+install: mvn clean install -D createAssembly=true -D createRelease=true -Dgpg.skip=true

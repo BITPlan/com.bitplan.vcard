@@ -14,6 +14,8 @@
 	<name>VCard</name>
 	<description>VCard handler</description>
 	<properties>
+		<!-- for parent pom to work -->
+		<github.project>com.bitplan.vcard</github.project>
 	    <!-- for README.md generation -->
 		<documentation.wiki>http://wiki.bitplan.com/index.php/VCard</documentation.wiki>
 		<!-- activate createAssembly -->
