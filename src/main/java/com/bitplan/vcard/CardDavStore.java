@@ -37,7 +37,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 
 import com.github.sardine.DavResource;
@@ -91,6 +90,7 @@ public class CardDavStore {
   private Sardine sardine;
 
   private Map<String, DavResource> resourceMap = new HashMap<String, DavResource>();
+  private Map<String, SyncRef> syncMap = new HashMap<String, SyncRef>();
 
   /**
    * @return the backupPath
@@ -100,7 +100,7 @@ public class CardDavStore {
   }
 
   /**
-   * @param vcardPath
+   * @param backupPath
    *          the backupPath to set
    */
   public void getBackupPath(String backupPath) {
@@ -189,15 +189,16 @@ public class CardDavStore {
   public void setResourceMap(Map<String, DavResource> resourceMap) {
     this.resourceMap = resourceMap;
   }
-  
+
   /**
    * get the property file for the given user
+   * 
    * @param user
    * @return - the property file
    */
   public static File getPropertyFile(String user) {
-    String propertyFileName = System.getProperty("user.home")
-        + "/.vcard/" + user + ".ini";
+    String propertyFileName = System.getProperty("user.home") + "/.vcard/"
+        + user + ".ini";
     File propFile = new File(propertyFileName);
     return propFile;
   }
@@ -207,16 +208,16 @@ public class CardDavStore {
    * 
    * @param user
    * @param propName
-   * @return
-   * @throws IOException
+   * @return the property
    * @throws FileNotFoundException
+   * @throws IOException
    */
   public static String getProperty(String user, String propName)
       throws FileNotFoundException, IOException {
     Properties prop = propMap.get(user);
     if (prop == null) {
       prop = new Properties();
-      File propFile=getPropertyFile(user);
+      File propFile = getPropertyFile(user);
 
       prop.load(new FileReader(propFile));
       propMap.put(user, prop);
@@ -229,7 +230,7 @@ public class CardDavStore {
    * get the CardDav Store for the given user
    * 
    * @param user
-   * @return
+   * @return the CardDavStore
    * @throws Exception
    */
   public static CardDavStore getCardDavStore(String user) throws Exception {
@@ -330,7 +331,7 @@ public class CardDavStore {
    * get the Synchronization uid
    * 
    * @param vcard
-   * @return
+   * @return the uid
    */
   public String getSyncUid(VCard vcard) {
     /*
@@ -363,9 +364,8 @@ public class CardDavStore {
   }
 
   /**
-   * get the VCardRefs
+   * get a map of VCard references from the server if the map is empty
    * 
-   * @return
    * @throws Exception
    */
   public void getVCardRefs() throws Exception {
@@ -375,7 +375,7 @@ public class CardDavStore {
         LOGGER.log(Level.INFO, " got " + resources.size() + " resources");
       }
       for (DavResource resource : resources) {
-        String contentType=resource.getContentType();
+        String contentType = resource.getContentType();
         if (contentType.contains("text/vcard")) {
           String uid = this.getUid(resource);
           getResourceMap().put(uid, resource);
@@ -384,15 +384,103 @@ public class CardDavStore {
     }
   }
 
-  enum SyncResult {
+  /**
+   * the synchronization state of a VCard
+   */
+  enum SyncState {
     untouchedCard, modifiedCard, newCard
   };
+
+  /**
+   * a synchronisation reference
+   * 
+   * @author wf
+   *
+   */
+  public class SyncRef {
+    SyncState syncState;
+    DavResource ref;
+    String uid;
+    VCard vcard;
+    File vCardFile;
+
+    /**
+     * construct me from the given VCard Reference
+     * 
+     * @param ref
+     */
+    public SyncRef(DavResource ref) {
+      this.ref = ref;
+      uid = CardDavStore.this.getUid(ref);
+      syncState = SyncState.untouchedCard;
+      // example href:
+      // /davical/caldav.php/wf/addresses/e700df6d-c135-4b8b-855a-da5cf89ed90a.vcf
+      vCardFile = getVCardFile(ref);
+      boolean needSync = !vCardFile.exists();
+      if (!needSync) {
+        Date filemodified = new Date(vCardFile.lastModified());
+        needSync = filemodified.before(ref.getModified());
+        if (needSync)
+          syncState = SyncState.modifiedCard;
+      } else {
+        syncState = SyncState.newCard;
+      }
+    }
+
+    /**
+     * synchronize me
+     * 
+     * @throws Exception
+     */
+    public void sync() throws Exception {
+      switch (syncState) {
+      case untouchedCard:
+        vcard = Ezvcard.parse(vCardFile).first();
+        break;
+      case modifiedCard:
+      case newCard:
+        vcard = getVCardFromRef(ref);
+        write(vcard, vCardFile, ref);
+      }
+      if (debug) {
+        LOGGER.log(Level.INFO, this.toString());
+      }
+    }
+
+    /**
+     * get a human readable text representation of me
+     */
+    public String toString() {
+      String text = uid + ":" + vcard.getFormattedName().getValue();
+      for (Note note : vcard.getNotes()) {
+        text += "\n\t" + note.getValue();
+      } // for
+      return text;
+    }
+  }
+
+  /**
+   * prepare the synchronization by creating a map of Synchronization References
+   * 
+   * @throws Exception
+   */
+  public void prepareSync() throws Exception {
+    getVCardRefs();
+    syncMap.clear();
+    for (DavResource ref : getResourceMap().values()) {
+      if (debug) {
+        LOGGER.log(Level.INFO, ref.toString());
+      }
+      String uid = this.getUid(ref);
+      syncMap.put(uid, new SyncRef(ref));
+    }
+  }
 
   /**
    * get the VCard for the given ref
    * 
    * @param ref
-   * @return
+   * @return the VCard
    * @throws Exception
    */
   public VCard getVCardFromRef(DavResource ref) throws Exception {
@@ -418,56 +506,25 @@ public class CardDavStore {
   }
 
   /**
-   * synchronize the given ref
+   * get the Uid for the given VCard reference
    * 
    * @param ref
-   * @throws Exception
+   * @return - the uid
    */
-  public SyncResult syncRef(DavResource ref) throws Exception {
-    SyncResult result = SyncResult.untouchedCard;
-    // example href:
-    // /davical/caldav.php/wf/addresses/e700df6d-c135-4b8b-855a-da5cf89ed90a.vcf
-    File vCardFile = getVCardFile(ref);
-    boolean needSync = !vCardFile.exists();
-    if (!needSync) {
-      Date filemodified = new Date(vCardFile.lastModified());
-      needSync = filemodified.before(ref.getModified());
-      if (needSync)
-        result = SyncResult.modifiedCard;
-    } else {
-      result = SyncResult.newCard;
-    }
-    VCard vcard = null;
-    if (!needSync) {
-      vcard = Ezvcard.parse(vCardFile).first();
-    } else {
-      vcard = this.getVCardFromRef(ref);
-      write(vcard, vCardFile, ref);
-    }
-    String uid = FilenameUtils.getBaseName(vCardFile.getName());
-    if (debug) {
-      LOGGER.log(Level.INFO, uid + ":" + vcard.getFormattedName().getValue());
-      for (Note note : vcard.getNotes()) {
-        LOGGER.log(Level.INFO, "\t" + note.getValue());
-      } // for
-    }
-    add(vcard, uid);
-    return result;
-  }
-
   public String getUid(DavResource ref) {
     String[] hrefparts = ref.getPath().split("/");
     String uid = hrefparts[hrefparts.length - 1];
-    return uid.replace(".vcf","");
+    return uid.replace(".vcf", "");
   }
 
   /**
    * get the VCard file for the given reference
+   * 
    * @param ref
    * @return the vcard file
    */
   private File getVCardFile(DavResource ref) {
-    String cardfilename = getUid(ref)+".vcf";
+    String cardfilename = getUid(ref) + ".vcf";
     File vCardFile = new File(this.backupPath, cardfilename);
     return vCardFile;
   }
@@ -478,28 +535,33 @@ public class CardDavStore {
    * @throws Exception
    */
   public void sync() throws Exception {
-    getVCardRefs();
+    prepareSync();
+
+    // loop over all references
+    for (SyncRef syncRef : syncMap.values()) {
+      if (debug) {
+        LOGGER.log(Level.INFO, syncRef.toString());
+      }
+      syncRef.sync();
+    } // for
+    this.synchronizationStatistics();
+  } // sync
+
+  public void synchronizationStatistics() {
     // prepare statistic
-    Map<SyncResult, AtomicInteger> stats = new HashMap<SyncResult, AtomicInteger>();
-    for (SyncResult s : SyncResult.values()) {
+    Map<SyncState, AtomicInteger> stats = new HashMap<SyncState, AtomicInteger>();
+    for (SyncState s : SyncState.values()) {
       stats.put(s, new AtomicInteger(0));
     }
-    // loop over all references
-    for (DavResource ref : getResourceMap().values()) {
-      if (debug) {
-        LOGGER.log(Level.INFO, ref.toString());
-      }
-
-      SyncResult result = syncRef(ref);
+    for (SyncRef syncRef : syncMap.values()) {
       // update statistics
-      AtomicInteger count = stats.get(result);
+      AtomicInteger count = stats.get(syncRef.syncState);
       count.set(count.get() + 1);
-
-    } // for
-    for (SyncResult s : SyncResult.values()) {
+    }
+    for (SyncState s : SyncState.values()) {
       LOGGER.log(Level.INFO, s.name() + ": " + stats.get(s));
     }
-  } // sync
+  }
 
   public void diff(Map<String, VCard> self, Map<String, VCard> other,
       String thisTitle, String otherTitle) {
@@ -542,8 +604,8 @@ public class CardDavStore {
   /**
    * get the VCards for this store
    * 
-   * @param limit
-   * @return
+   * @param limit - the maximum number of cards to get
+   * @return - the vcards
    * @throws Exception
    */
   public List<VCard> getVCards(int limit) throws Exception {
@@ -590,19 +652,20 @@ public class CardDavStore {
 
   /**
    * remove the given vcard
+   * 
    * @param uid
    * @throws Exception
    */
   public void remove(String uid) throws Exception {
     getVCardRefs();
     DavResource ref = getResourceMap().get(uid);
-    if (ref!=null) {
-      System.out.println("removing "+uid);
-      sardine.delete(host+ref.getPath());
+    if (ref != null) {
+      System.out.println("removing " + uid);
+      sardine.delete(host + ref.getPath());
       File vcardFile = this.getVCardFile(ref);
       vcardFile.delete();
     } else {
-      System.err.println("not found "+uid);
+      System.err.println("not found " + uid);
     }
   }
 

@@ -12,7 +12,7 @@ for user in $@
 do
  echo "getting VCard data for $user"
  cd $p
- java -jar $jar --user $user
+ java -jar $jar -s --user $user
  #--debug
  backup=`grep backup $HOME/.vcard/$user.ini | cut -f2 -d=`
  cd $backup

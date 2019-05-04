@@ -12,7 +12,7 @@
 	<artifactId>com.bitplan.vcard</artifactId>
 	<version>0.0.1</version>
 	<name>VCard</name>
-	<description>VCard handler</description>
+	<description>VCard backup and synchronization library (Java)</description>
 	<properties>
 		<!-- for parent pom to work -->
 		<github.project>com.bitplan.vcard</github.project>

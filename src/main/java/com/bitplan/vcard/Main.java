@@ -35,6 +35,13 @@ public class Main {
 	@Option( aliases = { "--user" }, required = true, name = "-u", usage = "set user")
 	String user;
 	
+  @Option( aliases = { "--backup" }, required = false, name = "-b", usage = "full backup")
+	boolean doBackup;
+  
+  @Option( aliases = { "--sync" }, required = false, name = "-s", usage = "synchronize")
+  boolean doSync;
+
+  
 	public static boolean testmode=false;
 	
 	/**
@@ -60,9 +67,17 @@ public class Main {
 	 * @throws Exception 
 	 */
 	public void work() throws Exception {
-		System.out.println("Backing up CardDavStore for user="+user);
+		
 		CardDavStore cs = CardDavStore.getCardDavStore(user);
-		cs.backup();
+		if (doBackup) {
+		  System.out.println("Backing up CardDavStore for user="+user);
+		  cs.backup();
+		}
+		if (doSync) {
+      System.out.println("Synchronizing CardDavStore for user="+user);
+      cs.sync();		  
+		}
+		
 	}
 	
 	/**
