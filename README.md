@@ -1,7 +1,7 @@
 ### com.bitplan.vcard
-[VCard handler](http://wiki.bitplan.com/index.php/VCard)
+[VCard backup and synchronization library (Java)](http://wiki.bitplan.com/index.php/VCard)
 
-
+[![Travis (.org)](https://img.shields.io/travis/BITPlan/com.bitplan.vcard.svg)](https://travis-ci.org/BITPlan/com.bitplan.vcard)
 [![Maven Central](https://img.shields.io/maven-central/v/com.bitplan.vcard/com.bitplan.vcard.svg)](https://search.maven.org/artifact/com.bitplan.vcard/com.bitplan.vcard/0.0.1/jar)
 [![GitHub issues](https://img.shields.io/github/issues/BITPlan/com.bitplan.vcard.svg)](https://github.com/BITPlan/com.bitplan.vcard/issues)
 [![GitHub issues](https://img.shields.io/github/issues-closed/BITPlan/com.bitplan.vcard.svg)](https://github.com/BITPlan/com.bitplan.vcard/issues/?q=is%3Aissue+is%3Aclosed)
@@ -17,7 +17,7 @@
 
 Maven dependency
 ```xml
-<!-- VCard handler http://wiki.bitplan.com/index.php/VCard -->
+<!-- VCard backup and synchronization library (Java) http://wiki.bitplan.com/index.php/VCard -->
 <dependency>
   <groupId>com.bitplan.vcard</groupId>
   <artifactId>com.bitplan.vcard</artifactId>
